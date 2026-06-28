@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Хермес — мой ассистент</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{ --bg:#0e1621; --card:#17212b; --card2:#1c2a38; --accent:#3aa0ff; --txt:#e7eef5; --dim:#8aa0b4; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{ margin:0; background:var(--bg); color:var(--txt); font-family:-apple-system,Segoe UI,Roboto,system-ui,sans-serif; }
+  .wrap{ max-width:560px; margin:0 auto; padding:16px 14px 28px; }
+  .hdr{ display:flex; align-items:center; gap:10px; margin:6px 2px 14px; }
+  .hdr .logo{ font-size:26px; }
+  .hdr h1{ font-size:19px; margin:0; font-weight:700; }
+  .hdr .sub{ font-size:12px; color:var(--dim); margin-top:2px; }
+  .status{ background:var(--card); border-radius:14px; padding:12px 14px; margin-bottom:14px; font-size:13px; line-height:1.5; }
+  .status b{ color:var(--accent); }
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .tile{ background:var(--card); border:none; border-radius:16px; padding:18px 14px; color:var(--txt);
+         text-align:left; font-size:15px; font-weight:600; display:flex; flex-direction:column; gap:8px;
+         cursor:pointer; transition:transform .08s, background .15s; }
+  .tile:active{ transform:scale(.97); background:var(--card2); }
+  .tile .ic{ font-size:26px; }
+  .tile .d{ font-size:11.5px; color:var(--dim); font-weight:400; }
+  .full{ grid-column:1 / -1; }
+  .foot{ text-align:center; color:var(--dim); font-size:11px; margin-top:18px; line-height:1.5; }
+  .panel{ display:none; background:var(--card); border-radius:14px; padding:14px; margin-top:12px; }
+  .panel.on{ display:block; }
+  .panel h3{ margin:0 0 10px; font-size:15px; }
+  .panel input, .panel textarea{ width:100%; background:var(--card2); border:1px solid #2a3a4a; color:var(--txt);
+         border-radius:10px; padding:10px; font-size:14px; margin-bottom:8px; font-family:inherit; }
+  .btn{ width:100%; background:var(--accent); color:#fff; border:none; border-radius:10px; padding:12px;
+         font-size:15px; font-weight:600; cursor:pointer; }
+  .btn:active{ opacity:.85; }
+  .x{ float:right; color:var(--dim); cursor:pointer; font-size:18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="logo">🤖</div>
+    <div>
+      <h1>Хермес — мой ассистент</h1>
+      <div class="sub" id="who">Привет!</div>
+    </div>
+  </div>
+
+  <div class="status" id="status">Статус загружается…</div>
+
+  <div class="grid">
+    <button class="tile" onclick="open_panel('remind')"><span class="ic">⏰</span>Напомнить<span class="d">поставить напоминание</span></button>
+    <button class="tile" onclick="open_panel('note')"><span class="ic">🗄️</span>В архив<span class="d">сохранить заметку</span></button>
+    <button class="tile" onclick="open_panel('search')"><span class="ic">🔍</span>Поиск<span class="d">по архиву и в сети</span></button>
+    <button class="tile" onclick="cmd('журналы')"><span class="ic">📚</span>Журналы<span class="d">прислать все 1–6</span></button>
+    <button class="tile" onclick="cmd('статус')"><span class="ic">📊</span>Статус<span class="d">диск/память/бот</span></button>
+    <button class="tile" onclick="cmd('что ты помнишь')"><span class="ic">🧠</span>Память<span class="d">что бот знает</span></button>
+  </div>
+
+  <!-- Напоминание -->
+  <div class="panel" id="p-remind">
+    <span class="x" onclick="close_panels()">✕</span><h3>⏰ Новое напоминание</h3>
+    <input id="r-when" placeholder="когда: через 10 минут / в 15:30 / завтра в 9">
+    <input id="r-what" placeholder="о чём напомнить">
+    <button class="btn" onclick="send_remind()">Поставить</button>
+  </div>
+  <!-- Заметка в архив -->
+  <div class="panel" id="p-note">
+    <span class="x" onclick="close_panels()">✕</span><h3>🗄️ Заметка в архив</h3>
+    <textarea id="n-text" rows="3" placeholder="текст заметки — бот сам определит раздел"></textarea>
+    <button class="btn" onclick="send_note()">Сохранить</button>
+  </div>
+  <!-- Поиск -->
+  <div class="panel" id="p-search">
+    <span class="x" onclick="close_panels()">✕</span><h3>🔍 Поиск</h3>
+    <input id="s-q" placeholder="что найти (в архиве или в интернете)">
+    <button class="btn" onclick="send_search()">Искать</button>
+  </div>
+
+  <div class="foot">
+    🔐 Приватно: данные не уходят на сторонний сервер — всё через твоего бота на ПК.<br>
+    Ответы приходят в чат.
+  </div>
+</div>
+
+<script>
+  var tg = window.Telegram ? window.Telegram.WebApp : null;
+  if (tg) { tg.ready(); tg.expand(); try{ tg.setHeaderColor('#0e1621'); tg.setBackgroundColor('#0e1621'); }catch(e){} }
+  // приветствие по имени
+  try {
+    var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+    document.getElementById('who').textContent = u ? ('Привет, ' + (u.first_name||'братан') + '!') : 'Привет, братан!';
+  } catch(e){}
+  // статус (статичная подсказка; живой статус — по кнопке «Статус»)
+  document.getElementById('status').innerHTML =
+    'Бот: <b>✅ работает 24/7</b> · понимает текст, голос, фото, документы, видео.<br>Жми плитку — команда уйдёт боту, ответ придёт в чат.';
+
+  function send(obj){
+    if (tg && tg.sendData){ tg.sendData(JSON.stringify(obj)); }   // уходит боту как web_app_data, апп закроется
+    else { alert('Открой через Telegram'); }
+  }
+  function cmd(text){ send({type:'cmd', text:text}); }
+  function open_panel(id){ close_panels(); document.getElementById('p-'+id).classList.add('on'); }
+  function close_panels(){ document.querySelectorAll('.panel').forEach(function(p){ p.classList.remove('on'); }); }
+  function send_remind(){
+    var w=document.getElementById('r-when').value.trim(), t=document.getElementById('r-what').value.trim();
+    if(!w||!t){ return; } send({type:'cmd', text:'напомни '+w+' '+t});
+  }
+  function send_note(){
+    var t=document.getElementById('n-text').value.trim(); if(!t){ return; } send({type:'cmd', text:'в архив: '+t});
+  }
+  function send_search(){
+    var q=document.getElementById('s-q').value.trim(); if(!q){ return; } send({type:'cmd', text:q});
+  }
+</script>
+</body>
+</html>
